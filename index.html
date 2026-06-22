@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Blue Skeleton Laser</title>
+    <meta name="description"
+        content="Interactive hand-tracking laser drawing app using AI-powered gesture recognition. Draw neon trails in the air with your hands.">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --laser-red: #ff0000;
+            --selection-yellow: #ffff00;
+            --dark-bg: #000000;
+            --ui-scale: 1;
+        }
+
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--dark-bg);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            touch-action: none;
+        }
+
+        #input_video {
+            position: absolute;
+            visibility: hidden;
+            width: 1px;
+            height: 1px;
+            transform: scaleX(-1);
+        }
+
+        #output_canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 5;
+            transform: scaleX(-1);
+        }
+
+        /* ───────────────────────── Loading Screen ───────────────────────── */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            gap: 20px;
+            transition: opacity 0.4s ease;
+        }
+
+        #loading-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-ring-wrap {
+            position: relative;
+            width: 84px;
+            height: 84px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loader-ring-bg,
+        .loader-ring-fg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 84px;
+            height: 84px;
+            transform: rotate(-90deg);
+        }
+
+        .loader-ring-bg circle {
+            fill: none;
+            stroke: #111;
+            stroke-width: 4;
+        }
+
+        .loader-ring-fg circle {
+            fill: none;
+            stroke: var(--neon-blue);
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 245;
+            stroke-dashoffset: 245;
+            transition: stroke-dashoffset 0.25s ease;
+            filter: drop-shadow(0 0 6px rgba(0, 242, 255, 0.7));
+        }
+
+        .loader-pct {
+            color: var(--neon-blue);
+            font-size: 17px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.5px;
+        }
+
+        .loading-text {
+            color: var(--neon-blue);
+            font-size: 13px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+
+        .loading-eta {
+            color: rgba(0, 242, 255, 0.45);
+            font-size: 11px;
+            letter-spacing: 1px;
+            min-height: 14px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ───────────────────────── Toolbar ───────────────────────── */
+        #toolbar {
+            position: fixed;
+            top: 50%;
+            left: 14px;
+            transform: translateY(-50%);
+            z-index: 60;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            background: rgba(5, 5, 20, 0.85);
+            border: 1px solid rgba(0, 242, 255, 0.15);
+            border-radius: 14px;
+            padding: 10px 8px;
+            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.06), 0 8px 32px rgba(0, 0, 0, 0.6);
+            opacity: 0;
+            transition: opacity 0.6s ease, transform 0.3s ease;
+            pointer-events: none;
+            max-height: 90vh;
+            overflow-y: auto;
+            scrollbar-width: none;
+        }
+
+        #toolbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        #toolbar.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .tb-section-label {
+            color: rgba(0, 242, 255, 0.5);
+            font-size: 8.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.3px;
+            text-align: center;
+            padding: 2px 0 1px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .tb-divider {
+            width: 100%;
+            height: 1px;
+            background: rgba(0, 242, 255, 0.1);
+            margin: 2px 0;
+        }
+
+        /* Color swatches */
+        .tb-colors {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            padding: 1px;
+        }
+
+
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 7px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.15s ease;
+            position: relative;
+        }
+
+        .color-swatch:hover {
+            transform: scale(1.15);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .color-swatch.active {
+            border-color: #fff;
+            box-shadow: 0 0 12px var(--swatch-glow, rgba(255, 255, 255, 0.4));
+        }
+
+        .color-swatch.active::after {
+            content: '';
+            position: absolute;
+            inset: -5px;
+            border-radius: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        /* Custom color */
+        .custom-color-wrap {
+            display: flex;
+            justify-content: center;
+            padding: 1px 0;
+        }
+
+        #custom-color-input {
+            width: 78px;
+            height: 22px;
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            -webkit-appearance: none;
+        }
+
+        #custom-color-input::-webkit-color-swatch-wrapper {
+            padding: 2px;
+        }
+
+        #custom-color-input::-webkit-color-swatch {
+            border: none;
+            border-radius: 4px;
+        }
+
+        /* Brush types */
+        .tb-brushes {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .brush-btn {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            width: 100%;
+            padding: 5px 9px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 7px;
+            color: rgba(255, 255, 255, 0.55);
+            font-size: 10.5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .brush-btn:hover {
+            background: rgba(0, 242, 255, 0.08);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .brush-btn.active {
+            background: rgba(0, 242, 255, 0.12);
+            border-color: rgba(0, 242, 255, 0.35);
+            color: var(--neon-blue);
+        }
+
+        .brush-icon {
+            font-size: 13px;
+            width: 16px;
+            text-align: center;
+        }
+
+        /* Thickness slider */
+        .tb-thickness {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 1px 4px;
+        }
+
+        .thickness-value {
+            color: var(--neon-blue);
+            font-size: 12px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #thickness-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 76px;
+            height: 5px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.08);
+            outline: none;
+            cursor: pointer;
+        }
+
+        #thickness-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            border: 2px solid rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 8px rgba(0, 242, 255, 0.5);
+            cursor: pointer;
+            transition: box-shadow 0.2s;
+        }
+
+        #thickness-slider::-webkit-slider-thumb:hover {
+            box-shadow: 0 0 16px rgba(0, 242, 255, 0.8);
+        }
+
+        #thickness-slider::-moz-range-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            border: 2px solid rgba(0, 0, 0, 0.4);
+            box-shadow: 0 0 8px rgba(0, 242, 255, 0.5);
+            cursor: pointer;
+        }
+
+        /* Undo button */
+        .tb-undo-btn {
+            padding: 6px 9px;
+            background: rgba(0, 153, 255, 0.1);
+            border: 1px solid rgba(0, 153, 255, 0.2);
+            border-radius: 7px;
+            color: #4da6ff;
+            font-size: 10.5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+
+        .tb-undo-btn:hover {
+            background: rgba(0, 153, 255, 0.2);
+            border-color: rgba(0, 153, 255, 0.4);
+            color: #80c1ff;
+        }
+
+        /* Clear button */
+        .tb-clear-btn {
+            padding: 6px 9px;
+            background: rgba(255, 50, 50, 0.1);
+            border: 1px solid rgba(255, 50, 50, 0.2);
+            border-radius: 7px;
+            color: #ff6b6b;
+            font-size: 10.5px;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .tb-clear-btn:hover {
+            background: rgba(255, 50, 50, 0.2);
+            border-color: rgba(255, 50, 50, 0.4);
+            color: #ff4444;
+        }
+
+        /* Toolbar collapse handle (small screens) */
+        #toolbar-toggle {
+            display: none;
+            position: fixed;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 61;
+            width: 26px;
+            height: 46px;
+            background: rgba(5, 5, 20, 0.85);
+            border: 1px solid rgba(0, 242, 255, 0.18);
+            border-radius: 8px;
+            color: var(--neon-blue);
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+
+        /* Instructions overlay */
+        #instructions {
+            position: fixed;
+            bottom: 26px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            display: flex;
+            gap: 14px;
+            opacity: 0;
+            transition: opacity 1s ease;
+            pointer-events: none;
+            flex-wrap: wrap;
+            justify-content: center;
+            padding: 0 12px;
+        }
+
+        #instructions.visible {
+            opacity: 1;
+        }
+
+        .instruction-card {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            border-radius: 11px;
+            padding: 10px 16px;
+            color: #fff;
+            font-size: 12px;
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.05);
+        }
+
+        .instruction-icon {
+            font-size: 18px;
+        }
+
+        .instruction-label {
+            color: var(--neon-blue);
+            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .instruction-desc {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 11px;
+        }
+
+        /* ───────────────────────── Responsive ───────────────────────── */
+        @media (max-width: 720px) {
+            #toolbar {
+                left: 8px;
+                padding: 8px 6px;
+                border-radius: 12px;
+                transform: translateY(-50%) scale(0.92);
+                transform-origin: left center;
+            }
+
+            #toolbar.collapsed {
+                transform: translateY(-50%) translateX(-120%) scale(0.92);
+            }
+
+            #toolbar-toggle {
+                display: flex;
+            }
+
+            .instruction-card {
+                padding: 8px 12px;
+            }
+
+            .instruction-desc {
+                font-size: 10px;
+            }
+
+            #help-notch .notch-tab {
+                width: 86px;
+                height: 19px;
+                font-size: 9px;
+            }
+        }
+
+        @media (max-height: 480px) {
+            #toolbar {
+                top: 50%;
+                transform: translateY(-50%) scale(0.8);
+                transform-origin: left center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="loading-screen">
+        <div class="loader-ring-wrap">
+            <svg class="loader-ring-bg" viewBox="0 0 84 84">
+                <circle cx="42" cy="42" r="39"></circle>
+            </svg>
+            <svg class="loader-ring-fg" viewBox="0 0 84 84" id="loader-ring-fg">
+                <circle cx="42" cy="42" r="39"></circle>
+            </svg>
+            <div class="loader-pct" id="loader-pct">0%</div>
+        </div>
+        <div class="loading-text" id="loading-text">Initializing Hand Tracking</div>
+        <div class="loading-eta" id="loading-eta"></div>
+    </div>
+
+
+    <!-- ─── Toolbar ─── -->
+    <div id="toolbar-toggle">▸</div>
+    <div id="toolbar">
+        <div class="tb-section-label">Color</div>
+        <div class="tb-colors" id="color-palette">
+            <div class="color-swatch active" data-color="#ff0000"
+                style="background:#ff0000; --swatch-glow:rgba(255,0,0,0.5);" title="Red"></div>
+            <div class="color-swatch" data-color="#00f2ff"
+                style="background:#00f2ff; --swatch-glow:rgba(0,242,255,0.5);" title="Cyan"></div>
+            <div class="color-swatch" data-color="#00ff66"
+                style="background:#00ff66; --swatch-glow:rgba(0,255,102,0.5);" title="Green"></div>
+            <div class="color-swatch" data-color="#ff00ff"
+                style="background:#ff00ff; --swatch-glow:rgba(255,0,255,0.5);" title="Magenta"></div>
+            <div class="color-swatch" data-color="#ffaa00"
+                style="background:#ffaa00; --swatch-glow:rgba(255,170,0,0.5);" title="Orange"></div>
+            <div class="color-swatch" data-color="#ffffff"
+                style="background:#ffffff; --swatch-glow:rgba(255,255,255,0.5);" title="White"></div>
+            <div class="color-swatch" data-color="#9d4eff"
+                style="background:#9d4eff; --swatch-glow:rgba(157,78,255,0.5);" title="Violet"></div>
+            <div class="color-swatch" data-color="#ff5c8a"
+                style="background:#ff5c8a; --swatch-glow:rgba(255,92,138,0.5);" title="Pink"></div>
+            <div class="color-swatch" data-color="#caff00"
+                style="background:#caff00; --swatch-glow:rgba(202,255,0,0.5);" title="Lime"></div>
+        </div>
+        <div class="custom-color-wrap">
+            <input type="color" id="custom-color-input" value="#ff0000" title="Pick custom color">
+        </div>
+
+        <div class="tb-divider"></div>
+
+        <div class="tb-section-label">Brush</div>
+        <div class="tb-brushes" id="brush-palette">
+            <button class="brush-btn active" data-brush="laser">
+                <span class="brush-icon">⚡</span> Laser
+            </button>
+            <button class="brush-btn" data-brush="neon">
+                <span class="brush-icon">💡</span> Neon
+            </button>
+            <button class="brush-btn" data-brush="dotted">
+                <span class="brush-icon">⬤</span> Dotted
+            </button>
+            <button class="brush-btn" data-brush="rainbow">
+                <span class="brush-icon">🌈</span> Rainbow
+            </button>
+        </div>
+
+        <div class="tb-divider"></div>
+
+        <div class="tb-section-label">Size</div>
+        <div class="tb-thickness">
+            <span class="thickness-value" id="thickness-display">5</span>
+            <input type="range" id="thickness-slider" min="1" max="20" value="5" aria-label="Brush thickness" title="Brush thickness">
+        </div>
+
+        <div class="tb-divider"></div>
+
+        <button class="tb-undo-btn" id="undo-btn">↩ Undo</button>
+        <button class="tb-clear-btn" id="clear-btn">🗑 Clear All</button>
+    </div>
+
+
+    <div id="instructions">
+        <div class="instruction-card">
+            <span class="instruction-icon">☝️</span>
+            <div>
+                <div class="instruction-label">Draw</div>
+                <div class="instruction-desc">Point index finger up</div>
+            </div>
+        </div>
+        <div class="instruction-card">
+            <span class="instruction-icon">🤏</span>
+            <div>
+                <div class="instruction-label">Move</div>
+                <div class="instruction-desc">Pinch to drag drawings</div>
+            </div>
+        </div>
+    </div>
+
+    <video id="input_video" playsinline></video>
+    <canvas id="output_canvas"></canvas>
+
+    <script>
+        // ─────────────────────────────────────────────────────────────
+        // DOM Elements
+        // ─────────────────────────────────────────────────────────────
+        const videoElement = document.getElementById('input_video');
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: false });
+        const loadingScreen = document.getElementById('loading-screen');
+        const loaderRingFg = document.getElementById('loader-ring-fg').querySelector('circle');
+        const loaderPct = document.getElementById('loader-pct');
+        const loadingTextEl = document.getElementById('loading-text');
+        const loadingEtaEl = document.getElementById('loading-eta');
+        const instructionsEl = document.getElementById('instructions');
+        const toolbar = document.getElementById('toolbar');
+        const toolbarToggle = document.getElementById('toolbar-toggle');
+        const thicknessSlider = document.getElementById('thickness-slider');
+        const thicknessDisplay = document.getElementById('thickness-display');
+        const customColorInput = document.getElementById('custom-color-input');
+        const clearBtn = document.getElementById('clear-btn');
+        const undoBtn = document.getElementById('undo-btn');
+
+        // ─────────────────────────────────────────────────────────────
+        // Real Loading Progress
+        // Each phase has a real async task + an honest weight.
+        // We measure how long each phase actually takes, then use a
+        // running average of phase durations to project ETA for what's left.
+        // ─────────────────────────────────────────────────────────────
+        const LOAD_PHASES = [
+            { key: 'scripts', label: 'Loading vision scripts', weight: 10 },
+            { key: 'model', label: 'Fetching hand model', weight: 35 },
+            { key: 'camera', label: 'Requesting camera access', weight: 20 },
+            { key: 'stream', label: 'Starting camera stream', weight: 20 },
+            { key: 'firstframe', label: 'Calibrating first frame', weight: 15 }
+        ];
+        const TOTAL_WEIGHT = LOAD_PHASES.reduce((s, p) => s + p.weight, 0);
+        const RING_CIRCUMFERENCE = 245; // 2*PI*39 approx, matches stroke-dasharray
+
+        let completedWeight = 0;
+        let phaseStartTime = performance.now();
+        let loadStartTime = performance.now();
+
+        function setLoadingProgress(pct, label) {
+            pct = Math.max(0, Math.min(100, pct));
+            const offset = RING_CIRCUMFERENCE - (RING_CIRCUMFERENCE * pct / 100);
+            loaderRingFg.style.strokeDashoffset = offset;
+            loaderPct.textContent = Math.round(pct) + '%';
+            if (label) loadingTextEl.textContent = label;
+
+            // ETA estimate: based on elapsed time vs progress made so far.
+            const elapsed = (performance.now() - loadStartTime) / 1000;
+            if (pct > 4 && pct < 99) {
+                const totalEstimate = elapsed / (pct / 100);
+                const remaining = Math.max(0, totalEstimate - elapsed);
+                loadingEtaEl.textContent = remaining < 1
+                    ? 'almost done…'
+                    : `about ${remaining.toFixed(1)}s left`;
+            } else if (pct >= 99) {
+                loadingEtaEl.textContent = '';
+            }
+        }
+
+        function completePhase(key) {
+            const phase = LOAD_PHASES.find(p => p.key === key);
+            if (!phase || phase.done) return;
+            phase.done = true;
+            completedWeight += phase.weight;
+            setLoadingProgress((completedWeight / TOTAL_WEIGHT) * 100);
+        }
+
+        function startPhase(key) {
+            const phase = LOAD_PHASES.find(p => p.key === key);
+            if (!phase) return;
+            setLoadingProgress((completedWeight / TOTAL_WEIGHT) * 100, phase.label);
+        }
+
+        function finishLoading() {
+            setLoadingProgress(100, 'Ready');
+            setTimeout(() => {
+                loadingScreen.classList.add('fade-out');
+                setTimeout(() => { loadingScreen.style.display = 'none'; }, 450);
+            }, 200);
+        }
+
+        // Phase 1: scripts already executing means they're loaded by the
+        // time this runs (browser blocks on <script> tags), so credit it now.
+        startPhase('scripts');
+        completePhase('scripts');
+        startPhase('model');
+
+        // ─────────────────────────────────────────────────────────────
+        // Drawing Settings
+        // ─────────────────────────────────────────────────────────────
+        let activeColor = '#ff0000';
+        let activeBrush = 'laser';    // laser | neon | dotted | rainbow
+        let activeThickness = 5;
+        let rainbowHue = 0;
+        let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+
+
+        // ─────────────────────────────────────────────────────────────
+        // State
+        // ─────────────────────────────────────────────────────────────
+        let drawings = [];
+        let particles = [];
+        let currentPath = null;
+        let selectedDrawing = null;
+        let isDragging = false;
+        let lastFingerPos = { x: 0, y: 0 };
+        let instructionsShown = false;
+        const MAX_PARTICLES = 260; // cap for smoothness on lower-end devices
+
+        // ─────────────────────────────────────────────────────────────
+        // Toolbar: Color swatches (delegated, since some are added dynamically active)
+        // ─────────────────────────────────────────────────────────────
+        document.getElementById('color-palette').addEventListener('click', (e) => {
+            const swatch = e.target.closest('.color-swatch');
+            if (!swatch) return;
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+            swatch.classList.add('active');
+            activeColor = swatch.dataset.color;
+            customColorInput.value = activeColor;
+        });
+
+        customColorInput.addEventListener('input', (e) => {
+            activeColor = e.target.value;
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        });
+
+        document.querySelectorAll('.brush-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.brush-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeBrush = btn.dataset.brush;
+            });
+        });
+
+        thicknessSlider.addEventListener('input', (e) => {
+            activeThickness = parseInt(e.target.value);
+            thicknessDisplay.textContent = activeThickness;
+        });
+
+        function performUndo() {
+            if (drawings.length > 0) {
+                const removed = drawings.pop();
+                if (currentPath && currentPath.id === removed.id) {
+                    currentPath = null;
+                }
+                if (selectedDrawing && selectedDrawing.id === removed.id) {
+                    selectedDrawing = null;
+                    isDragging = false;
+                }
+            }
+        }
+
+        undoBtn.addEventListener('click', performUndo);
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+                e.preventDefault();
+                performUndo();
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            drawings = [];
+            particles = [];
+            currentPath = null;
+            selectedDrawing = null;
+            isDragging = false;
+        });
+
+        // Collapsible toolbar on small screens
+        toolbarToggle.addEventListener('click', () => {
+            toolbar.classList.toggle('collapsed');
+            toolbarToggle.textContent = toolbar.classList.contains('collapsed') ? '▸' : '◂';
+        });
+
+        // ─────────────────────────────────────────────────────────────
+        // Canvas Setup (DPR-aware, debounced resize for smoothness)
+        // ─────────────────────────────────────────────────────────────
+        function setupCanvas() {
+            dpr = Math.max(1, window.devicePixelRatio || 1);
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            canvasElement.style.width = w + 'px';
+            canvasElement.style.height = h + 'px';
+            canvasElement.width = Math.round(w * dpr);
+            canvasElement.height = Math.round(h * dpr);
+            canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        let resizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(setupCanvas, 120);
+        });
+        setupCanvas();
+
+        // logical (CSS-pixel) width/height helpers since canvas.width/height
+        // are now physical pixels scaled by dpr
+        function logicalWidth() { return window.innerWidth; }
+        function logicalHeight() { return window.innerHeight; }
+
+        // ─────────────────────────────────────────────────────────────
+        // Spark Particle Class
+        // ─────────────────────────────────────────────────────────────
+        class Spark {
+            constructor(x, y, baseColor) {
+                this.x = x;
+                this.y = y;
+                this.baseColor = baseColor;
+                const angle = Math.random() * Math.PI * 2;
+                const force = Math.random() * 15 + 10;
+                this.speedX = Math.cos(angle) * force;
+                this.speedY = Math.sin(angle) * force;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.03 + 0.015;
+                this.gravity = 0.45;
+                this.friction = 0.96;
+            }
+
+            update() {
+                this.speedX *= this.friction;
+                this.speedY *= this.friction;
+                this.speedY += this.gravity;
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life -= this.decay;
+            }
+
+            draw() {
+                if (this.life <= 0) return;
+
+                const bc = hexToRgb(this.baseColor);
+                let r, g, b;
+                if (this.life > 0.8) {
+                    r = Math.min(255, bc.r + 100);
+                    g = Math.min(255, bc.g + 100);
+                    b = Math.min(255, bc.b + 100);
+                } else if (this.life > 0.4) {
+                    r = bc.r;
+                    g = bc.g;
+                    b = bc.b;
+                } else {
+                    r = Math.floor(bc.r * 0.6);
+                    g = Math.floor(bc.g * 0.3);
+                    b = Math.floor(bc.b * 0.2);
+                }
+
+                canvasCtx.save();
+                canvasCtx.globalAlpha = this.life;
+                canvasCtx.strokeStyle = `rgb(${r},${g},${b})`;
+                canvasCtx.lineWidth = 1.5 * this.life;
+                canvasCtx.lineCap = 'round';
+                canvasCtx.shadowBlur = 8 * this.life;
+                canvasCtx.shadowColor = `rgb(${r},${g},${b})`;
+
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(this.x, this.y);
+                const tailX = this.x - this.speedX * 0.8;
+                const tailY = this.y - this.speedY * 0.8;
+                canvasCtx.lineTo(tailX, tailY);
+                canvasCtx.stroke();
+                canvasCtx.restore();
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Color Utility
+        // ─────────────────────────────────────────────────────────────
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 255, g: 0, b: 0 };
+        }
+
+        function hslToHex(h, s, l) {
+            s /= 100; l /= 100;
+            const a = s * Math.min(l, 1 - l);
+            const f = n => {
+                const k = (n + h / 30) % 12;
+                const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+                return Math.round(255 * Math.max(0, Math.min(1, color))).toString(16).padStart(2, '0');
+            };
+            return `#${f(0)}${f(8)}${f(4)}`;
+        }
+
+        function lightenColor(hex, amount) {
+            const rgb = hexToRgb(hex);
+            const r = Math.min(255, rgb.r + amount);
+            const g = Math.min(255, rgb.g + amount);
+            const b = Math.min(255, rgb.b + amount);
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function hexToRgbA(hex, alpha) {
+            const rgb = hexToRgb(hex);
+            return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Utility Functions
+        // ─────────────────────────────────────────────────────────────
+        function createSparkEffect(x, y, color) {
+            if (particles.length >= MAX_PARTICLES) return;
+            const count = Math.min(
+                Math.floor(Math.random() * 4) + 3,
+                MAX_PARTICLES - particles.length
+            );
+            for (let i = 0; i < count; i++) {
+                particles.push(new Spark(x, y, color));
+            }
+        }
+
+        function getDistance(p1, p2) {
+            return Math.sqrt(
+                Math.pow((p1.x - p2.x) * logicalWidth(), 2) +
+                Math.pow((p1.y - p2.y) * logicalHeight(), 2)
+            );
+        }
+
+        function isStrictlyIndexUp(lm) {
+            const thumbOpen = getDistance(lm[4], lm[17]) > getDistance(lm[3], lm[17]);
+            const indexOpen = lm[8].y < lm[6].y;
+            const middleOpen = lm[12].y < lm[10].y;
+            const ringOpen = lm[16].y < lm[14].y;
+            const pinkyOpen = lm[20].y < lm[18].y;
+            return indexOpen && !middleOpen && !ringOpen && !pinkyOpen && !thumbOpen;
+        }
+
+        function findDrawingAt(x, y) {
+            const padding = 80;
+            for (let i = drawings.length - 1; i >= 0; i--) {
+                const d = drawings[i];
+                for (let p of d.points) {
+                    if (Math.hypot(x - p.x, y - p.y) < padding) return d;
+                }
+            }
+            return null;
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Show Instructions
+        // ─────────────────────────────────────────────────────────────
+        function showInstructions() {
+            if (!instructionsShown) {
+                instructionsShown = true;
+                instructionsEl.classList.add('visible');
+                toolbar.classList.add('visible');
+                setTimeout(() => {
+                    instructionsEl.classList.remove('visible');
+                }, 8000);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Core: Process Hand Results
+        // ─────────────────────────────────────────────────────────────
+        let gotFirstFrame = false;
+
+        function onResults(results) {
+            if (!gotFirstFrame) {
+                gotFirstFrame = true;
+                completePhase('firstframe');
+                finishLoading();
+                showInstructions();
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, logicalWidth(), logicalHeight());
+            canvasCtx.fillStyle = '#000000';
+            canvasCtx.fillRect(0, 0, logicalWidth(), logicalHeight());
+
+            drawStoredPaths();
+            updateParticles();
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const hand = results.multiHandLandmarks[0];
+                const indexTip = hand[8];
+                const thumbTip = hand[4];
+
+                const ix = indexTip.x * logicalWidth();
+                const iy = indexTip.y * logicalHeight();
+                const tx = thumbTip.x * logicalWidth();
+                const ty = thumbTip.y * logicalHeight();
+
+                const pinchDist = getDistance(hand[4], hand[8]);
+
+                if (isStrictlyIndexUp(hand)) {
+                    if (!currentPath) {
+                        let drawColor = activeColor;
+                        if (activeBrush === 'rainbow') {
+                            drawColor = hslToHex(rainbowHue, 100, 50);
+                        }
+                        currentPath = {
+                            points: [],
+                            id: Date.now(),
+                            color: drawColor,
+                            brush: activeBrush,
+                            thickness: activeThickness
+                        };
+                        drawings.push(currentPath);
+                    }
+
+                    let pointColor = currentPath.color;
+                    if (activeBrush === 'rainbow') {
+                        rainbowHue = (rainbowHue + 3) % 360;
+                        pointColor = hslToHex(rainbowHue, 100, 50);
+                    }
+
+                    currentPath.points.push({ x: ix, y: iy, color: pointColor });
+                    createSparkEffect(ix, iy, pointColor);
+                    isDragging = false;
+                    selectedDrawing = null;
+                }
+                else if (pinchDist < 45) {
+                    const midX = (ix + tx) / 2;
+                    const midY = (iy + ty) / 2;
+
+                    if (!isDragging) {
+                        selectedDrawing = findDrawingAt(midX, midY);
+                        if (selectedDrawing) {
+                            isDragging = true;
+                            lastFingerPos = { x: midX, y: midY };
+                        }
+                    }
+
+                    if (isDragging && selectedDrawing) {
+                        const dx = midX - lastFingerPos.x;
+                        const dy = midY - lastFingerPos.y;
+                        selectedDrawing.points.forEach(p => {
+                            p.x += dx;
+                            p.y += dy;
+                        });
+                        lastFingerPos = { x: midX, y: midY };
+                    }
+                    currentPath = null;
+                }
+                else {
+                    currentPath = null;
+                    isDragging = false;
+                    selectedDrawing = null;
+                }
+
+                drawNeonSkeleton(hand);
+            } else {
+                currentPath = null;
+                isDragging = false;
+                selectedDrawing = null;
+            }
+            canvasCtx.restore();
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Render: Update Particles
+        // ─────────────────────────────────────────────────────────────
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw();
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Render: Draw Stored Laser Paths (smoothed with quadratic curves)
+        // ─────────────────────────────────────────────────────────────
+        function drawStoredPaths() {
+            drawings.forEach(d => {
+                if (d.points.length < 2) return;
+
+                const isSelected = selectedDrawing && selectedDrawing.id === d.id;
+                const brushType = d.brush || 'laser';
+                const thickness = d.thickness || 5;
+                const baseColor = d.color || '#ff0000';
+
+                canvasCtx.save();
+                canvasCtx.lineCap = 'round';
+                canvasCtx.lineJoin = 'round';
+
+                if (brushType === 'dotted') {
+                    d.points.forEach((p) => {
+                        const c = p.color || baseColor;
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(p.x, p.y, thickness * 0.8, 0, Math.PI * 2);
+                        canvasCtx.fillStyle = isSelected ? '#ffff00' : c;
+                        canvasCtx.shadowBlur = isSelected ? 20 : 12;
+                        canvasCtx.shadowColor = isSelected ? '#ffff00' : c;
+                        canvasCtx.fill();
+
+                        canvasCtx.beginPath();
+                        canvasCtx.arc(p.x, p.y, thickness * 0.3, 0, Math.PI * 2);
+                        canvasCtx.fillStyle = isSelected ? '#fffde7' : lightenColor(c, 120);
+                        canvasCtx.shadowBlur = 0;
+                        canvasCtx.fill();
+                    });
+                }
+                else if (brushType === 'rainbow') {
+                    for (let i = 1; i < d.points.length; i++) {
+                        const segColor = d.points[i].color || baseColor;
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo(d.points[i - 1].x, d.points[i - 1].y);
+                        canvasCtx.lineTo(d.points[i].x, d.points[i].y);
+
+                        canvasCtx.strokeStyle = isSelected ? '#ffff00' : segColor;
+                        canvasCtx.lineWidth = isSelected ? thickness + 3 : thickness;
+                        canvasCtx.shadowBlur = isSelected ? 30 : 18;
+                        canvasCtx.shadowColor = isSelected ? '#ffff00' : segColor;
+                        canvasCtx.stroke();
+
+                        canvasCtx.strokeStyle = isSelected ? '#fffde7' : lightenColor(segColor, 100);
+                        canvasCtx.lineWidth = isSelected ? thickness * 0.5 : thickness * 0.4;
+                        canvasCtx.shadowBlur = 0;
+                        canvasCtx.stroke();
+                    }
+                }
+                else if (brushType === 'neon') {
+                    canvasCtx.shadowBlur = isSelected ? 45 : 35;
+                    canvasCtx.shadowColor = isSelected ? '#ffff00' : baseColor;
+                    canvasCtx.strokeStyle = isSelected ? 'rgba(255,255,0,0.3)' : hexToRgbA(baseColor, 0.3);
+                    canvasCtx.lineWidth = thickness * 3;
+                    drawSmoothPath(d.points);
+
+                    canvasCtx.shadowBlur = isSelected ? 25 : 20;
+                    canvasCtx.strokeStyle = isSelected ? '#ffff00' : baseColor;
+                    canvasCtx.lineWidth = isSelected ? thickness + 3 : thickness;
+                    drawSmoothPath(d.points);
+
+                    canvasCtx.shadowBlur = 0;
+                    canvasCtx.strokeStyle = isSelected ? '#fffde7' : '#ffffff';
+                    canvasCtx.lineWidth = isSelected ? thickness * 0.5 : thickness * 0.35;
+                    drawSmoothPath(d.points);
+                }
+                else {
+                    canvasCtx.shadowBlur = isSelected ? 30 : 15;
+                    canvasCtx.shadowColor = isSelected ? '#ffff00' : baseColor;
+                    canvasCtx.strokeStyle = isSelected ? '#ffff00' : baseColor;
+                    canvasCtx.lineWidth = isSelected ? thickness + 3 : thickness;
+                    drawSmoothPath(d.points);
+
+                    canvasCtx.shadowBlur = 0;
+                    canvasCtx.strokeStyle = isSelected ? '#fffde7' : '#ffffff';
+                    canvasCtx.lineWidth = isSelected ? thickness * 0.5 : thickness * 0.4;
+                    drawSmoothPath(d.points);
+                }
+
+                canvasCtx.restore();
+            });
+        }
+
+        // ─── Helper: Draw a smoothed path using quadratic curves through midpoints ───
+        // This removes the jagged/segmented look of raw lineTo-only paths,
+        // producing much smoother strokes without adding any gradients.
+        function drawSmoothPath(points) {
+            if (points.length < 3) {
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(points[0].x, points[0].y);
+                for (let i = 1; i < points.length; i++) {
+                    canvasCtx.lineTo(points[i].x, points[i].y);
+                }
+                canvasCtx.stroke();
+                return;
+            }
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length - 1; i++) {
+                const midX = (points[i].x + points[i + 1].x) / 2;
+                const midY = (points[i].y + points[i + 1].y) / 2;
+                canvasCtx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+            }
+            const last = points[points.length - 1];
+            canvasCtx.lineTo(last.x, last.y);
+            canvasCtx.stroke();
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Render: Draw Neon Hand Skeleton
+        // ─────────────────────────────────────────────────────────────
+        function drawNeonSkeleton(landmarks) {
+            const blue = '#00f2ff';
+            canvasCtx.save();
+            canvasCtx.shadowBlur = 15;
+            canvasCtx.shadowColor = blue;
+            canvasCtx.strokeStyle = blue;
+            canvasCtx.lineWidth = 3;
+
+            const connections = [
+                [0, 1], [1, 2], [2, 3], [3, 4],
+                [0, 5], [5, 6], [6, 7], [7, 8],
+                [5, 9], [9, 10], [10, 11], [11, 12],
+                [9, 13], [13, 14], [14, 15], [15, 16],
+                [13, 17], [17, 18], [18, 19], [19, 20],
+                [0, 17]
+            ];
+
+            connections.forEach(([a, b]) => {
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(
+                    landmarks[a].x * logicalWidth(),
+                    landmarks[a].y * logicalHeight()
+                );
+                canvasCtx.lineTo(
+                    landmarks[b].x * logicalWidth(),
+                    landmarks[b].y * logicalHeight()
+                );
+                canvasCtx.stroke();
+            });
+
+            canvasCtx.fillStyle = blue;
+            landmarks.forEach(point => {
+                canvasCtx.beginPath();
+                canvasCtx.arc(
+                    point.x * logicalWidth(),
+                    point.y * logicalHeight(),
+                    4, 0, Math.PI * 2
+                );
+                canvasCtx.fill();
+            });
+            canvasCtx.restore();
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Initialize MediaPipe Hands
+        // ─────────────────────────────────────────────────────────────
+        let hands, camera;
+
+        try {
+            hands = new Hands({
+                locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }
+            });
+
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.9,
+                minTrackingConfidence: 0.9
+            });
+
+            hands.onResults(onResults);
+
+            // hands.initialize() returns a promise that resolves once the
+            // wasm + model assets are actually fetched and ready.
+            hands.initialize().then(() => {
+                completePhase('model');
+                startPhase('camera');
+                return startCamera();
+            }).catch((err) => {
+                console.error('Hand model initialization failed:', err);
+                completePhase('model');
+                startPhase('camera');
+                return startCamera();
+            });
+        } catch (err) {
+            console.error('MediaPipe Hands could not be created:', err);
+            loadingTextEl.textContent = 'Failed to load hand tracking';
+            loadingEtaEl.textContent = 'please reload the page or try a different browser';
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Initialize Camera
+        // ─────────────────────────────────────────────────────────────
+        function startCamera() {
+            try {
+                camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        try {
+                            await hands.send({ image: videoElement });
+                        } catch (e) {
+                            // Silently ignore transient frame send errors
+                        }
+                    },
+                    width: 1280,
+                    height: 720
+                });
+
+                completePhase('camera');
+                startPhase('stream');
+
+                return camera.start().then(() => {
+                    completePhase('stream');
+                    startPhase('firstframe');
+                    // Safety net: if no hand detected within a few seconds,
+                    // still drop loading screen so users aren't stuck.
+                    setTimeout(() => {
+                        if (!gotFirstFrame) {
+                            gotFirstFrame = true;
+                            completePhase('firstframe');
+                            finishLoading();
+                            showInstructions();
+                        }
+                    }, 4000);
+                }).catch((err) => {
+                    console.error('Camera start failed:', err);
+                    loadingTextEl.textContent = 'Camera access needed';
+                    loadingEtaEl.textContent = 'allow camera permission and reload';
+                });
+            } catch (err) {
+                console.error('Camera initialization failed:', err);
+                loadingTextEl.textContent = 'Camera setup failed';
+                loadingEtaEl.textContent = 'please check camera permissions and reload';
+            }
+        }
+    </script>
+</body>
+
+</html>
