@@ -55,86 +55,89 @@
             transform: scaleX(-1);
         }
 
-        /* ───────────────────────── Loading Screen ───────────────────────── */
-        #loading-screen {
+        /* ───────────────────────── Boot Overlay ───────────────────────── */
+        #boot-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
+            z-index: 9999;
             background: #000;
             display: flex;
-            flex-direction: column;
-            justify-content: center;
             align-items: center;
-            z-index: 100;
-            gap: 20px;
-            transition: opacity 0.4s ease;
+            justify-content: center;
+            transition: opacity 0.6s ease;
         }
 
-        #loading-screen.fade-out {
+        #boot-overlay.fade-out {
             opacity: 0;
             pointer-events: none;
         }
 
-        .loader-ring-wrap {
-            position: relative;
-            width: 84px;
-            height: 84px;
+        #boot-inner {
+            width: min(520px, 90vw);
+            height: min(420px, 80vh);
+            background: #000;
+            border-radius: 12px;
+            border: 0.5px solid rgba(34, 229, 229, 0.2);
+            padding: 28px 32px;
+            box-sizing: border-box;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            flex-direction: column;
+            font-family: 'Courier New', 'Consolas', monospace;
         }
 
-        .loader-ring-bg,
-        .loader-ring-fg {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 84px;
-            height: 84px;
-            transform: rotate(-90deg);
+        #boot-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 18px;
         }
 
-        .loader-ring-bg circle {
-            fill: none;
-            stroke: #111;
-            stroke-width: 4;
-        }
-
-        .loader-ring-fg circle {
-            fill: none;
-            stroke: var(--neon-blue);
-            stroke-width: 4;
-            stroke-linecap: round;
-            stroke-dasharray: 245;
-            stroke-dashoffset: 245;
-            transition: stroke-dashoffset 0.25s ease;
-            filter: drop-shadow(0 0 6px rgba(0, 242, 255, 0.7));
-        }
-
-        .loader-pct {
-            color: var(--neon-blue);
-            font-size: 17px;
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: 0.5px;
-        }
-
-        .loading-text {
-            color: var(--neon-blue);
+        #boot-title {
+            color: #22e5e5;
             font-size: 13px;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            opacity: 0.75;
+            letter-spacing: 1px;
         }
 
-        .loading-eta {
-            color: rgba(0, 242, 255, 0.45);
-            font-size: 11px;
-            letter-spacing: 1px;
-            min-height: 14px;
+        #boot-pct {
+            color: #22e5e5;
+            font-size: 28px;
+            font-weight: 500;
             font-variant-numeric: tabular-nums;
+        }
+
+        #boot-bar-track {
+            height: 2px;
+            background: #0d2b2b;
+            border-radius: 2px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+
+        #boot-bar {
+            height: 100%;
+            width: 0%;
+            background: #22e5e5;
+            transition: width 0.3s ease;
+        }
+
+        #boot-terminal-log {
+            font-size: 12.5px;
+            color: #22e5e5;
+            flex: 1;
+            line-height: 2;
+            overflow-y: auto;
+            scrollbar-width: none;
+        }
+
+        #boot-terminal-log::-webkit-scrollbar {
+            display: none;
+        }
+
+        #boot-status-line {
+            font-family: 'Courier New', 'Consolas', monospace;
+            font-size: 11px;
+            color: #3a6a6a;
+            margin-top: 8px;
         }
 
         /* ───────────────────────── Toolbar ───────────────────────── */
@@ -243,6 +246,7 @@
             cursor: pointer;
             padding: 0;
             -webkit-appearance: none;
+            appearance: none;
         }
 
         #custom-color-input::-webkit-color-swatch-wrapper {
@@ -508,18 +512,16 @@
 
 <body>
 
-    <div id="loading-screen">
-        <div class="loader-ring-wrap">
-            <svg class="loader-ring-bg" viewBox="0 0 84 84">
-                <circle cx="42" cy="42" r="39"></circle>
-            </svg>
-            <svg class="loader-ring-fg" viewBox="0 0 84 84" id="loader-ring-fg">
-                <circle cx="42" cy="42" r="39"></circle>
-            </svg>
-            <div class="loader-pct" id="loader-pct">0%</div>
+    <div id="boot-overlay">
+        <div id="boot-inner">
+            <div id="boot-header">
+                <div id="boot-title">SYSTEM BOOT</div>
+                <div id="boot-pct">0%</div>
+            </div>
+            <div id="boot-bar-track"><div id="boot-bar"></div></div>
+            <div id="boot-terminal-log"></div>
+            <div id="boot-status-line">initializing…</div>
         </div>
-        <div class="loading-text" id="loading-text">Initializing Hand Tracking</div>
-        <div class="loading-eta" id="loading-eta"></div>
     </div>
 
 
@@ -556,16 +558,16 @@
         <div class="tb-section-label">Brush</div>
         <div class="tb-brushes" id="brush-palette">
             <button class="brush-btn active" data-brush="laser">
-                <span class="brush-icon">⚡</span> Laser
+                <span class="brush-icon"></span> Laser
             </button>
             <button class="brush-btn" data-brush="neon">
-                <span class="brush-icon">💡</span> Neon
+                <span class="brush-icon"></span> Neon
             </button>
             <button class="brush-btn" data-brush="dotted">
-                <span class="brush-icon">⬤</span> Dotted
+                <span class="brush-icon"></span> Dotted
             </button>
             <button class="brush-btn" data-brush="rainbow">
-                <span class="brush-icon">🌈</span> Rainbow
+                <span class="brush-icon"></span> Rainbow
             </button>
         </div>
 
@@ -579,21 +581,21 @@
 
         <div class="tb-divider"></div>
 
-        <button class="tb-undo-btn" id="undo-btn">↩ Undo</button>
-        <button class="tb-clear-btn" id="clear-btn">🗑 Clear All</button>
+        <button class="tb-undo-btn" id="undo-btn">Undo</button>
+        <button class="tb-clear-btn" id="clear-btn">Clear All</button>
     </div>
 
 
     <div id="instructions">
         <div class="instruction-card">
-            <span class="instruction-icon">☝️</span>
+            <span class="instruction-icon"></span>
             <div>
                 <div class="instruction-label">Draw</div>
                 <div class="instruction-desc">Point index finger up</div>
             </div>
         </div>
         <div class="instruction-card">
-            <span class="instruction-icon">🤏</span>
+            <span class="instruction-icon"></span>
             <div>
                 <div class="instruction-label">Move</div>
                 <div class="instruction-desc">Pinch to drag drawings</div>
@@ -611,11 +613,11 @@
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: false });
-        const loadingScreen = document.getElementById('loading-screen');
-        const loaderRingFg = document.getElementById('loader-ring-fg').querySelector('circle');
-        const loaderPct = document.getElementById('loader-pct');
-        const loadingTextEl = document.getElementById('loading-text');
-        const loadingEtaEl = document.getElementById('loading-eta');
+        const bootOverlay = document.getElementById('boot-overlay');
+        const bootPctEl = document.getElementById('boot-pct');
+        const bootBarEl = document.getElementById('boot-bar');
+        const bootLogEl = document.getElementById('boot-terminal-log');
+        const bootStatusEl = document.getElementById('boot-status-line');
         const instructionsEl = document.getElementById('instructions');
         const toolbar = document.getElementById('toolbar');
         const toolbarToggle = document.getElementById('toolbar-toggle');
@@ -625,88 +627,70 @@
         const clearBtn = document.getElementById('clear-btn');
         const undoBtn = document.getElementById('undo-btn');
 
-        // ─────────────────────────────────────────────────────────────
-        // Real Loading Progress
-        // Each phase has a real async task + an honest weight.
-        // We measure how long each phase actually takes, then use a
-        // running average of phase durations to project ETA for what's left.
-        // ─────────────────────────────────────────────────────────────
+        // Loading Progress
+
         const LOAD_PHASES = [
-            { key: 'scripts', label: 'Loading vision scripts', weight: 10 },
-            { key: 'model', label: 'Fetching hand model', weight: 35 },
-            { key: 'camera', label: 'Requesting camera access', weight: 20 },
-            { key: 'stream', label: 'Starting camera stream', weight: 20 },
-            { key: 'firstframe', label: 'Calibrating first frame', weight: 15 }
+            { key: 'scripts', startText: 'loading vision scripts…',      doneText: 'vision scripts: OK',       weight: 10 },
+            { key: 'model',   startText: 'fetching hand-tracking model…', doneText: 'hand-tracking model: OK',  weight: 35 },
+            { key: 'camera',  startText: 'requesting camera access…',    doneText: 'camera access: OK',        weight: 20 },
+            { key: 'stream',  startText: 'starting camera stream…',      doneText: 'camera stream: OK',        weight: 20 },
+            { key: 'firstframe', startText: 'calibrating first frame…',  doneText: 'first frame: OK',          weight: 15 }
         ];
         const TOTAL_WEIGHT = LOAD_PHASES.reduce((s, p) => s + p.weight, 0);
-        const RING_CIRCUMFERENCE = 245; // 2*PI*39 approx, matches stroke-dasharray
 
         let completedWeight = 0;
-        let phaseStartTime = performance.now();
-        let loadStartTime = performance.now();
 
-        function setLoadingProgress(pct, label) {
-            pct = Math.max(0, Math.min(100, pct));
-            const offset = RING_CIRCUMFERENCE - (RING_CIRCUMFERENCE * pct / 100);
-            loaderRingFg.style.strokeDashoffset = offset;
-            loaderPct.textContent = Math.round(pct) + '%';
-            if (label) loadingTextEl.textContent = label;
-
-            // ETA estimate: based on elapsed time vs progress made so far.
-            const elapsed = (performance.now() - loadStartTime) / 1000;
-            if (pct > 4 && pct < 99) {
-                const totalEstimate = elapsed / (pct / 100);
-                const remaining = Math.max(0, totalEstimate - elapsed);
-                loadingEtaEl.textContent = remaining < 1
-                    ? 'almost done…'
-                    : `about ${remaining.toFixed(1)}s left`;
-            } else if (pct >= 99) {
-                loadingEtaEl.textContent = '';
+        window.setBootProgress = function (percent, label) {
+            percent = Math.max(0, Math.min(100, percent));
+            bootPctEl.textContent = Math.round(percent) + '%';
+            bootBarEl.style.width = percent + '%';
+            if (label) {
+                const line = document.createElement('div');
+                line.textContent = '> ' + label;
+                bootLogEl.appendChild(line);
+                bootLogEl.scrollTop = bootLogEl.scrollHeight;
             }
-        }
+            bootStatusEl.textContent = percent >= 100 ? 'ready'
+                : percent > 60 ? 'almost done…' : 'loading…';
+        };
 
         function completePhase(key) {
             const phase = LOAD_PHASES.find(p => p.key === key);
             if (!phase || phase.done) return;
             phase.done = true;
             completedWeight += phase.weight;
-            setLoadingProgress((completedWeight / TOTAL_WEIGHT) * 100);
+            window.setBootProgress((completedWeight / TOTAL_WEIGHT) * 100, phase.doneText);
         }
 
         function startPhase(key) {
             const phase = LOAD_PHASES.find(p => p.key === key);
             if (!phase) return;
-            setLoadingProgress((completedWeight / TOTAL_WEIGHT) * 100, phase.label);
+            window.setBootProgress((completedWeight / TOTAL_WEIGHT) * 100, phase.startText);
         }
 
         function finishLoading() {
-            setLoadingProgress(100, 'Ready');
+            window.setBootProgress(100, 'launching canvas…');
             setTimeout(() => {
-                loadingScreen.classList.add('fade-out');
-                setTimeout(() => { loadingScreen.style.display = 'none'; }, 450);
-            }, 200);
+                bootOverlay.classList.add('fade-out');
+                setTimeout(() => { bootOverlay.style.display = 'none'; }, 650);
+            }, 300);
         }
 
-        // Phase 1: scripts already executing means they're loaded by the
-        // time this runs (browser blocks on <script> tags), so credit it now.
         startPhase('scripts');
         completePhase('scripts');
         startPhase('model');
 
-        // ─────────────────────────────────────────────────────────────
         // Drawing Settings
-        // ─────────────────────────────────────────────────────────────
+
         let activeColor = '#ff0000';
-        let activeBrush = 'laser';    // laser | neon | dotted | rainbow
+        let activeBrush = 'laser';  
         let activeThickness = 5;
         let rainbowHue = 0;
         let dpr = Math.max(1, window.devicePixelRatio || 1);
 
 
-
-        // ─────────────────────────────────────────────────────────────
         // State
-        // ─────────────────────────────────────────────────────────────
+
         let drawings = [];
         let particles = [];
         let currentPath = null;
@@ -716,9 +700,8 @@
         let instructionsShown = false;
         const MAX_PARTICLES = 260; // cap for smoothness on lower-end devices
 
-        // ─────────────────────────────────────────────────────────────
-        // Toolbar: Color swatches (delegated, since some are added dynamically active)
-        // ─────────────────────────────────────────────────────────────
+        // Toolbar: Color swatches
+
         document.getElementById('color-palette').addEventListener('click', (e) => {
             const swatch = e.target.closest('.color-swatch');
             if (!swatch) return;
@@ -782,9 +765,8 @@
             toolbarToggle.textContent = toolbar.classList.contains('collapsed') ? '▸' : '◂';
         });
 
-        // ─────────────────────────────────────────────────────────────
         // Canvas Setup (DPR-aware, debounced resize for smoothness)
-        // ─────────────────────────────────────────────────────────────
+
         function setupCanvas() {
             dpr = Math.max(1, window.devicePixelRatio || 1);
             const w = window.innerWidth;
@@ -804,13 +786,13 @@
         setupCanvas();
 
         // logical (CSS-pixel) width/height helpers since canvas.width/height
-        // are now physical pixels scaled by dpr
+
         function logicalWidth() { return window.innerWidth; }
         function logicalHeight() { return window.innerHeight; }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Spark Particle Class
-        // ─────────────────────────────────────────────────────────────
+
         class Spark {
             constructor(x, y, baseColor) {
                 this.x = x;
@@ -872,9 +854,8 @@
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
         // Color Utility
-        // ─────────────────────────────────────────────────────────────
+
         function hexToRgb(hex) {
             const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
             return result ? {
@@ -908,9 +889,8 @@
             return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
         }
 
-        // ─────────────────────────────────────────────────────────────
         // Utility Functions
-        // ─────────────────────────────────────────────────────────────
+    
         function createSparkEffect(x, y, color) {
             if (particles.length >= MAX_PARTICLES) return;
             const count = Math.min(
@@ -949,9 +929,9 @@
             return null;
         }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Show Instructions
-        // ─────────────────────────────────────────────────────────────
+
         function showInstructions() {
             if (!instructionsShown) {
                 instructionsShown = true;
@@ -963,9 +943,8 @@
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
         // Core: Process Hand Results
-        // ─────────────────────────────────────────────────────────────
+
         let gotFirstFrame = false;
 
         function onResults(results) {
@@ -1061,9 +1040,9 @@
             canvasCtx.restore();
         }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Render: Update Particles
-        // ─────────────────────────────────────────────────────────────
+
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
                 particles[i].update();
@@ -1072,9 +1051,9 @@
             }
         }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Render: Draw Stored Laser Paths (smoothed with quadratic curves)
-        // ─────────────────────────────────────────────────────────────
+
         function drawStoredPaths() {
             drawings.forEach(d => {
                 if (d.points.length < 2) return;
@@ -1158,9 +1137,7 @@
             });
         }
 
-        // ─── Helper: Draw a smoothed path using quadratic curves through midpoints ───
-        // This removes the jagged/segmented look of raw lineTo-only paths,
-        // producing much smoother strokes without adding any gradients.
+
         function drawSmoothPath(points) {
             if (points.length < 3) {
                 canvasCtx.beginPath();
@@ -1183,9 +1160,9 @@
             canvasCtx.stroke();
         }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Render: Draw Neon Hand Skeleton
-        // ─────────────────────────────────────────────────────────────
+
         function drawNeonSkeleton(landmarks) {
             const blue = '#00f2ff';
             canvasCtx.save();
@@ -1229,9 +1206,9 @@
             canvasCtx.restore();
         }
 
-        // ─────────────────────────────────────────────────────────────
+
         // Initialize MediaPipe Hands
-        // ─────────────────────────────────────────────────────────────
+
         let hands, camera;
 
         try {
@@ -1250,8 +1227,7 @@
 
             hands.onResults(onResults);
 
-            // hands.initialize() returns a promise that resolves once the
-            // wasm + model assets are actually fetched and ready.
+
             hands.initialize().then(() => {
                 completePhase('model');
                 startPhase('camera');
@@ -1264,13 +1240,12 @@
             });
         } catch (err) {
             console.error('MediaPipe Hands could not be created:', err);
-            loadingTextEl.textContent = 'Failed to load hand tracking';
-            loadingEtaEl.textContent = 'please reload the page or try a different browser';
+            window.setBootProgress(0, 'ERROR: failed to load hand tracking');
+            bootStatusEl.textContent = 'please reload the page or try a different browser';
         }
 
-        // ─────────────────────────────────────────────────────────────
         // Initialize Camera
-        // ─────────────────────────────────────────────────────────────
+
         function startCamera() {
             try {
                 camera = new Camera(videoElement, {
@@ -1278,7 +1253,7 @@
                         try {
                             await hands.send({ image: videoElement });
                         } catch (e) {
-                            // Silently ignore transient frame send errors
+
                         }
                     },
                     width: 1280,
@@ -1291,8 +1266,7 @@
                 return camera.start().then(() => {
                     completePhase('stream');
                     startPhase('firstframe');
-                    // Safety net: if no hand detected within a few seconds,
-                    // still drop loading screen so users aren't stuck.
+
                     setTimeout(() => {
                         if (!gotFirstFrame) {
                             gotFirstFrame = true;
@@ -1303,8 +1277,8 @@
                     }, 4000);
                 }).catch((err) => {
                     console.error('Camera start failed:', err);
-                    loadingTextEl.textContent = 'Camera access needed';
-                    loadingEtaEl.textContent = 'allow camera permission and reload';
+                    window.setBootProgress(0, 'ERROR: camera access needed');
+                    bootStatusEl.textContent = 'allow camera permission and reload';
                 });
             } catch (err) {
                 console.error('Camera initialization failed:', err);
