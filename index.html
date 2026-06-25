@@ -55,7 +55,7 @@
             transform: scaleX(-1);
         }
 
-        /* ───────────────────────── Boot Overlay ───────────────────────── */
+
         #boot-overlay {
             position: fixed;
             inset: 0;
@@ -140,7 +140,7 @@
             margin-top: 8px;
         }
 
-        /* ───────────────────────── Toolbar ───────────────────────── */
+
         #toolbar {
             position: fixed;
             top: 50%;
@@ -193,7 +193,7 @@
             margin: 2px 0;
         }
 
-        /* Color swatches */
+
         .tb-colors {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -230,7 +230,7 @@
             border: 1px solid rgba(255, 255, 255, 0.15);
         }
 
-        /* Custom color */
+
         .custom-color-wrap {
             display: flex;
             justify-content: center;
@@ -258,7 +258,7 @@
             border-radius: 4px;
         }
 
-        /* Brush types */
+
         .tb-brushes {
             display: flex;
             flex-direction: column;
@@ -298,7 +298,7 @@
             text-align: center;
         }
 
-        /* Thickness slider */
+
         .tb-thickness {
             display: flex;
             flex-direction: column;
@@ -352,7 +352,6 @@
             cursor: pointer;
         }
 
-        /* Undo button */
         .tb-undo-btn {
             padding: 6px 9px;
             background: rgba(0, 153, 255, 0.1);
@@ -373,7 +372,7 @@
             color: #80c1ff;
         }
 
-        /* Clear button */
+
         .tb-clear-btn {
             padding: 6px 9px;
             background: rgba(255, 50, 50, 0.1);
@@ -393,7 +392,7 @@
             color: #ff4444;
         }
 
-        /* Toolbar collapse handle (small screens) */
+
         #toolbar-toggle {
             display: none;
             position: fixed;
@@ -414,7 +413,7 @@
         }
 
 
-        /* Instructions overlay */
+
         #instructions {
             position: fixed;
             bottom: 26px;
@@ -467,7 +466,7 @@
             font-size: 11px;
         }
 
-        /* ───────────────────────── Responsive ───────────────────────── */
+
         @media (max-width: 720px) {
             #toolbar {
                 left: 8px;
@@ -525,7 +524,7 @@
     </div>
 
 
-    <!-- ─── Toolbar ─── -->
+
     <div id="toolbar-toggle">▸</div>
     <div id="toolbar">
         <div class="tb-section-label">Color</div>
@@ -607,9 +606,7 @@
     <canvas id="output_canvas"></canvas>
 
     <script>
-        // ─────────────────────────────────────────────────────────────
-        // DOM Elements
-        // ─────────────────────────────────────────────────────────────
+
         const videoElement = document.getElementById('input_video');
         const canvasElement = document.getElementById('output_canvas');
         const canvasCtx = canvasElement.getContext('2d', { willReadFrequently: false });
@@ -627,7 +624,7 @@
         const clearBtn = document.getElementById('clear-btn');
         const undoBtn = document.getElementById('undo-btn');
 
-        // Loading Progress
+
 
         const LOAD_PHASES = [
             { key: 'scripts', startText: 'loading vision scripts…',      doneText: 'vision scripts: OK',       weight: 10 },
@@ -680,7 +677,7 @@
         completePhase('scripts');
         startPhase('model');
 
-        // Drawing Settings
+
 
         let activeColor = '#ff0000';
         let activeBrush = 'laser';  
@@ -689,7 +686,6 @@
         let dpr = Math.max(1, window.devicePixelRatio || 1);
 
 
-        // State
 
         let drawings = [];
         let particles = [];
@@ -698,9 +694,8 @@
         let isDragging = false;
         let lastFingerPos = { x: 0, y: 0 };
         let instructionsShown = false;
-        const MAX_PARTICLES = 260; // cap for smoothness on lower-end devices
+        const MAX_PARTICLES = 260; 
 
-        // Toolbar: Color swatches
 
         document.getElementById('color-palette').addEventListener('click', (e) => {
             const swatch = e.target.closest('.color-swatch');
@@ -759,13 +754,12 @@
             isDragging = false;
         });
 
-        // Collapsible toolbar on small screens
+
         toolbarToggle.addEventListener('click', () => {
             toolbar.classList.toggle('collapsed');
             toolbarToggle.textContent = toolbar.classList.contains('collapsed') ? '▸' : '◂';
         });
 
-        // Canvas Setup (DPR-aware, debounced resize for smoothness)
 
         function setupCanvas() {
             dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -785,13 +779,11 @@
         });
         setupCanvas();
 
-        // logical (CSS-pixel) width/height helpers since canvas.width/height
 
         function logicalWidth() { return window.innerWidth; }
         function logicalHeight() { return window.innerHeight; }
 
 
-        // Spark Particle Class
 
         class Spark {
             constructor(x, y, baseColor) {
@@ -854,7 +846,6 @@
             }
         }
 
-        // Color Utility
 
         function hexToRgb(hex) {
             const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -889,7 +880,6 @@
             return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
         }
 
-        // Utility Functions
     
         function createSparkEffect(x, y, color) {
             if (particles.length >= MAX_PARTICLES) return;
@@ -930,7 +920,6 @@
         }
 
 
-        // Show Instructions
 
         function showInstructions() {
             if (!instructionsShown) {
@@ -943,7 +932,6 @@
             }
         }
 
-        // Core: Process Hand Results
 
         let gotFirstFrame = false;
 
@@ -1041,7 +1029,6 @@
         }
 
 
-        // Render: Update Particles
 
         function updateParticles() {
             for (let i = particles.length - 1; i >= 0; i--) {
@@ -1052,7 +1039,6 @@
         }
 
 
-        // Render: Draw Stored Laser Paths (smoothed with quadratic curves)
 
         function drawStoredPaths() {
             drawings.forEach(d => {
@@ -1161,7 +1147,7 @@
         }
 
 
-        // Render: Draw Neon Hand Skeleton
+
 
         function drawNeonSkeleton(landmarks) {
             const blue = '#00f2ff';
@@ -1207,7 +1193,6 @@
         }
 
 
-        // Initialize MediaPipe Hands
 
         let hands, camera;
 
@@ -1244,7 +1229,6 @@
             bootStatusEl.textContent = 'please reload the page or try a different browser';
         }
 
-        // Initialize Camera
 
         function startCamera() {
             try {
